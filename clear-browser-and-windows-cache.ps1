@@ -65,7 +65,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$showUsage = ($PSBoundParameters.Count -eq 0)
 $cutoff = if ($OlderThanDays -gt 0) { (Get-Date).AddDays(-$OlderThanDays) } else { $null }
 $targets = [System.Collections.Generic.List[object]]::new()
 $ScriptParameters = $PSBoundParameters
@@ -90,7 +89,7 @@ function Write-ParameterLine {
         [string]$Description
     )
 
-    if ($PSBoundParameters.ContainsKey($Name) -or $script:PSBoundParameters.ContainsKey($Name)) {
+    if ($script:ScriptParameters.ContainsKey($Name)) {
         Write-Host ("* {0,-30} {1}" -f "-$Name", $Description) `
             -ForegroundColor Yellow
     }
@@ -367,7 +366,7 @@ function Invoke-ExplorerCacheRebuild {
     $deleted = 0
     $skipped = 0
     $freed = 0L
-    $patterns = @('thumbcache_*.db', 'iconcache_*.db', '*.db')
+    $patterns = @('thumbcache_*.db', 'iconcache_*.db')
 
     foreach ($pattern in $patterns) {
         Get-ChildItem -LiteralPath $explorerCachePath -Filter $pattern -Force -File -ErrorAction SilentlyContinue |
@@ -429,20 +428,27 @@ function Invoke-DeliveryOptimizationCacheCleanup {
     $skipped = 0
     $freed = 0L
 
-    Get-ChildItem -LiteralPath $cachePath -Recurse -Force -ErrorAction SilentlyContinue |
+    # Files first, with the age filter applied per file (see Remove-TargetContents).
+    Get-ChildItem -LiteralPath $cachePath -Recurse -Force -File -ErrorAction SilentlyContinue |
         Where-Object { -not $cutoff -or $_.LastWriteTime -lt $cutoff } |
-        Sort-Object FullName -Descending |
         ForEach-Object {
-            $len = if ($_.PSIsContainer) { 0 } else { $_.Length }
+            $len = $_.Length
             try {
-                Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop
-                if (-not $_.PSIsContainer) {
-                    $deleted++
-                    $freed += $len
-                }
+                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                $deleted++
+                $freed += $len
             }
             catch {
                 $skipped++
+            }
+        }
+
+    # Then any directories left empty (deepest first).
+    Get-ChildItem -LiteralPath $cachePath -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+        Sort-Object { $_.FullName.Length } -Descending |
+        ForEach-Object {
+            if (-not (Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue)) {
+                try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch { }
             }
         }
 
@@ -470,22 +476,33 @@ function Remove-TargetContents {
     $skipped = 0
     $freed = 0L
 
-    Get-ChildItem -LiteralPath $Target.Path -Include $Target.Include -Recurse -Force -ErrorAction SilentlyContinue |
+    # Delete matching files only. The age filter is applied per file, never via a
+    # parent directory's -Recurse (which would wipe newer files inside an old folder).
+    Get-ChildItem -LiteralPath $Target.Path -Include $Target.Include -Recurse -Force -File -ErrorAction SilentlyContinue |
         Where-Object { -not $cutoff -or $_.LastWriteTime -lt $cutoff } |
-        Sort-Object FullName -Descending |
         ForEach-Object {
-            $len = if ($_.PSIsContainer) { 0 } else { $_.Length }
+            $len = $_.Length
             try {
-                Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction Stop
-                if (-not $_.PSIsContainer) {
-                    $deleted++
-                    $freed += $len
-                }
+                Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop
+                $deleted++
+                $freed += $len
             }
             catch {
                 $skipped++
             }
         }
+
+    # For wildcard-all targets, remove directories left empty (deepest first).
+    # Non-empty directories are kept, so any file that survived the age filter stays.
+    if ($Target.Include.Count -eq 1 -and $Target.Include[0] -eq '*') {
+        Get-ChildItem -LiteralPath $Target.Path -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+            Sort-Object { $_.FullName.Length } -Descending |
+            ForEach-Object {
+                if (-not (Get-ChildItem -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue)) {
+                    try { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction Stop } catch { }
+                }
+            }
+    }
 
     return [pscustomobject]@{
         Deleted = $deleted
