@@ -398,15 +398,59 @@ function Invoke-ExplorerCacheRebuild {
     }
 }
 
+function Get-DoCacheSnapshot {
+    try {
+        $snap = Get-DeliveryOptimizationPerfSnap -ErrorAction Stop -WarningAction SilentlyContinue
+    }
+    catch {
+        return [pscustomobject]@{ Files = 0; Bytes = 0L }
+    }
+
+    $files = [int]($snap.Files | Select-Object -First 1)
+    $bytes = [long]($snap.CacheSizeBytes | Select-Object -First 1)
+    return [pscustomobject]@{ Files = $files; Bytes = $bytes }
+}
+
 function Invoke-DeliveryOptimizationCacheCleanup {
+    if (-not (Test-IsAdministrator)) {
+        Write-Warning 'Delivery Optimization cache cleanup works best as Administrator.'
+    }
+
+    # Preferred path: the supported DeliveryOptimization module cmdlet. It resolves the
+    # real cache location (which is version/policy dependent and often NOT the legacy
+    # NetworkService path), and clears files whose NetworkService/SYSTEM-owned ACLs make
+    # a plain Remove-Item fail with access-denied. Manual deletion is only a fallback.
+    if (Get-Command Delete-DeliveryOptimizationCache -ErrorAction SilentlyContinue) {
+        if ($cutoff) {
+            Write-Warning ("Delete-DeliveryOptimizationCache has no age filter; the -OlderThanDays {0} setting is ignored and the entire DO cache is cleared." -f $OlderThanDays)
+        }
+
+        Write-Host 'Clearing Delivery Optimization cache (Delete-DeliveryOptimizationCache)...' -ForegroundColor Cyan
+
+        $before = Get-DoCacheSnapshot
+        try {
+            Delete-DeliveryOptimizationCache -Force -ErrorAction Stop
+        }
+        catch {
+            Write-Warning "Delete-DeliveryOptimizationCache failed: $($_.Exception.Message)"
+            return [pscustomobject]@{ Deleted = 0; Skipped = 0; Freed = 0L }
+        }
+        $after = Get-DoCacheSnapshot
+
+        return [pscustomobject]@{
+            Deleted = [Math]::Max(0, $before.Files - $after.Files)
+            Skipped = 0
+            Freed   = [long][Math]::Max(0L, $before.Bytes - $after.Bytes)
+        }
+    }
+
+    # --- Fallback: legacy manual file deletion (may be blocked by folder ACLs) ---
+    Write-Warning 'Delete-DeliveryOptimizationCache cmdlet not available; falling back to manual file deletion.'
+
     $cachePath = Resolve-SafeDirectory -Path "$env:WINDIR\ServiceProfiles\NetworkService\AppData\Local\Microsoft\DeliveryOptimization\Cache"
     if (-not $cachePath) {
         Write-Warning 'Delivery Optimization cache folder was not found or could not be accessed.'
         return [pscustomobject]@{ Deleted = 0; Skipped = 0; Freed = 0L }
-    }
-
-    if (-not (Test-IsAdministrator)) {
-        Write-Warning 'Delivery Optimization cache cleanup works best as Administrator.'
     }
 
     $stoppedService = $false
