@@ -1,0 +1,41 @@
+실제 버그 (1건, -OlderThanDays 사용 시)
+
+Remove-TargetContents(466~495행)가 디렉터리에도 나이 필터를 적용한 뒤 Remove-Item -Recurse 합니다.
+
+Get-ChildItem -LiteralPath $Target.Path -Include $Target.Include -Recurse
+-Force   # -File 없음 → 폴더도 포함
+| Where-Object { -not $cutoff -or $_.LastWriteTime -lt $cutoff }
+| Sort-Object FullName -Descending
+| ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force ...
+}
+
+문제: 오래된 폴더 하나가 필터를 통과하면, 그 안의 최신 파일까지 -Recurse로 
+같이 삭제됩니다. 즉 -OlderThanDays 30을 줘도 30일 이내 파일이 지워질 수
+있어요. (Get-TargetStats는 173행에서 -File을 써서 파일만 세므로 요약 수치와
+실제 삭제도 어긋납니다.)
+
+동일 패턴이 Invoke-DeliveryOptimizationCacheCleanup(432~447행)에도 있습니다.
+
+수정 방향 — 삭제도 파일 기준으로 하고 빈 폴더는 따로 처리:
+Get-ChildItem -LiteralPath $Target.Path -Include $Target.Include -Recurse
+-Force -File `
+| Where-Object { -not $cutoff -or $_.LastWriteTime -lt $cutoff }
+| ForEach-Object { ... Remove-Item -LiteralPath $_.FullName -Force ... }
+# 이후 남은 빈 디렉터리만 별도 정리(선택)
+-OlderThanDays를 안 쓰면(기본 0) 현재도 문제없이 동작하니, 이 옵션을 실제로 쓸
+때만 위험합니다.
+
+정리하면 좋은 점 (사소)
+
+- 죽은 변수 2개: $showUsage(68행)는 계산만 하고 Show-Usage는 501행에서 무조건
+호출됨. $ScriptParameters(71행)도 선언 후 미사용.
+- Write-ParameterLine(93행): 함수 내부의 $PSBoundParameters는 이 함수 자신의
+파라미터(Name/Description)라 항상 미스. 실제 하이라이트는
+$script:PSBoundParameters 폴백으로만 동작하니, 앞 절은 지우고 71행에 만들어 둔
+$ScriptParameters를 쓰는 게 원래 의도로 보입니다.
+- Invoke-ExplorerCacheRebuild(370행) 패턴에 '*.db'가 있어
+thumbcache_*/iconcache_* 패턴이 사실상 무의미하고, 해당 폴더의 다른 .db까지
+잡습니다. Explorer 캐시만 지우려면 *.db는 빼는 편이 안전.
+- 205행 Explorer 썸네일 캐시는 일반 타깃에도 있고 -RebuildExplorerCache에도
+있어 중복 — 다만 전자는 Explorer 실행 중이면 잠겨서 skip되니 실害는 없음.
+
