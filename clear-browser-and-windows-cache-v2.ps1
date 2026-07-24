@@ -929,3 +929,7 @@ if ($RunDiskCleanup) {
 Write-Host ''
 Write-Host '===== Cleanup Complete =====' -ForegroundColor Green
 Write-Host ('  Deleted {0} files, freed {1}. Skipped {2} locked/in-use item(s).' -f $deletedTotal, (Format-Size $freedTotal), $skippedTotal) -ForegroundColor Green
+
+Write-Host ''
+Write-Host ''
+Read-Host -Prompt "Press Enter to exit"
