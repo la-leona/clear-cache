@@ -151,3 +151,4 @@ foreach ($name in $processNames) {
 -CloseBrowsers : 기본값. 정상 종료를 먼저 시도하고, 필요하면 강제 종료.
 -ForceCloseBrowsers : 처음부터 즉시 강제 종료.
 
+EOF
