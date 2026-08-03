@@ -43,6 +43,21 @@ wscript.exe "C:\opt\bin\clear-cache-gui.vbs"
 `wscript.exe` 는 자체 콘솔이 없는 GUI 앱이고 `.vbs` 가 PowerShell 을 숨긴 상태로 실행하므로
 콘솔이 아예 생기지 않습니다.
 
+### 어느 PowerShell 로 실행되나
+
+`.vbs` 는 **PowerShell 7(`pwsh.exe`)을 우선** 사용하고, 없으면 Windows PowerShell 5.1
+(`powershell.exe`)로 폴백합니다.
+
+| 호스트 | 런타임 | 비고 |
+|---|---|---|
+| `%ProgramFiles%\PowerShell\7\pwsh.exe` | 최신 .NET | 다크 테마(`Window.ThemeMode`) 적용됨 |
+| `%WINDIR%\System32\WindowsPowerShell\v1.0\powershell.exe` | .NET Framework 4.8 | 폴백. `ThemeMode` 가 없어 테마는 미적용(그 외 기능은 동일) |
+
+`ThemeMode` 는 최신 .NET WPF 에만 있는 속성이라, GUI 는 **속성이 존재할 때만 적용**합니다.
+(가드가 없으면 5.1 에서 종료성 오류가 나고, 콘솔이 숨겨져 있어 오류도 안 보인 채 창이 안 뜹니다.)
+테마를 바꾸려면 `clear-cache-gui.ps1` 의 `$win.ThemeMode = 'Dark'` 값을
+`'Light'` / `'System'` 으로 수정하세요.
+
 > 참고: 기본 터미널을 "Windows 콘솔 호스트(conhost)"로 바꾸면 `-WindowStyle Hidden` 도
 > 동작하지만, 시스템 전체의 콘솔 사용 방식이 바뀌므로 권장하지 않습니다.
 

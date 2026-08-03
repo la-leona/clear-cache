@@ -386,6 +386,14 @@ foreach ($path in @($script:SettingsPathScript, $script:SettingsPathAppData)) {
 - **`-WindowStyle Hidden` 이 콘솔을 못 숨기는 경우가 있습니다.** 기본 콘솔 호스트가
   Windows Terminal 이면 터미널이 별도 프로세스라 창 스타일 요청을 무시합니다. 그래서 바로가기는
   `clear-cache-gui.vbs`(wscript) 를 사용합니다. 자세한 내용은 GUI README 1장 참고.
+- **호스트에 없는 .NET 속성을 대입하면 스크립트가 죽습니다.** `Window.ThemeMode` 처럼 최신 .NET
+  WPF 에만 있는 속성은 Windows PowerShell 5.1(.NET Framework)에서 존재하지 않고, 없는 속성에
+  대입하면 `RuntimeException` 이 발생합니다. `$ErrorActionPreference = 'Stop'` 이면 **종료성
+  오류**가 되어 창이 뜨기 전에 종료되고, 콘솔이 숨겨져 있으면 오류 메시지도 보이지 않습니다.
+  ```powershell
+  if ($null -ne $win.GetType().GetProperty('ThemeMode')) { $win.ThemeMode = 'Dark' }
+  ```
+  버전에 따라 다른 API 를 쓸 때는 이렇게 **리플렉션으로 존재 여부를 먼저 확인**하세요.
 - **숨긴 상태로 시작한 프로세스는 작업표시줄 버튼이 안 생깁니다.** `.vbs` 의
   `Run(cmd, 0, False)` 는 프로세스를 `SW_HIDE` 로 시작하는데, 이러면 셸이 그 프로세스의 **첫**
   창에 대한 작업표시줄 버튼을 만들지 않습니다(창을 움직이면 뒤늦게 나타남). 창이 뜬 뒤

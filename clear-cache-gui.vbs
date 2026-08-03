@@ -6,8 +6,14 @@
 '   powershell.exe -WindowStyle Hidden does NOT hide the console when Windows
 '   Terminal is the default console host: the terminal is a separate process and
 '   ignores the requested window style. wscript.exe has no console of its own,
-'   and Run(cmd, 0, False) starts PowerShell hidden, so nothing appears or
+'   and Run(cmd, 0, False) starts the shell hidden, so nothing appears or
 '   flashes at all.
+'
+' Which PowerShell:
+'   PowerShell 7 (pwsh.exe) is preferred because newer WPF features such as
+'   Window.ThemeMode only exist on modern .NET. Windows PowerShell 5.1
+'   (powershell.exe, .NET Framework) is used as a fallback when pwsh is absent,
+'   and the GUI guards those features so it still runs there.
 '
 ' Usage:
 '   Point the desktop shortcut at this file (or at:
@@ -17,7 +23,7 @@
 ' ---------------------------------------------------------------------------
 Option Explicit
 
-Dim sh, fso, here, target, cmd
+Dim sh, fso, here, target, exe, cmd
 Set sh  = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 
@@ -30,7 +36,13 @@ If Not fso.FileExists(target) Then
     WScript.Quit 1
 End If
 
-cmd = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File """ & target & """"
+' Prefer PowerShell 7, fall back to Windows PowerShell 5.1.
+exe = sh.ExpandEnvironmentStrings("%ProgramFiles%") & "\PowerShell\7\pwsh.exe"
+If Not fso.FileExists(exe) Then
+    exe = sh.ExpandEnvironmentStrings("%WINDIR%") & "\System32\WindowsPowerShell\v1.0\powershell.exe"
+End If
+
+cmd = """" & exe & """ -NoProfile -ExecutionPolicy Bypass -File """ & target & """"
 
 ' 0 = hidden window, False = do not wait for it to finish.
 sh.Run cmd, 0, False

@@ -200,6 +200,14 @@ function Get-HostExe {
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win = [Windows.Markup.XamlReader]::Load($reader)
 
+# Window theme ('Dark', 'Light', 'System', 'None'). Window.ThemeMode only exists on modern
+# .NET WPF (PowerShell 7), not on Windows PowerShell 5.1 / .NET Framework - and assigning a
+# missing property is a terminating error here ($ErrorActionPreference = 'Stop'), which would
+# kill the GUI silently when launched hidden. So check for the property first.
+if ($null -ne $win.GetType().GetProperty('ThemeMode')) {
+    $win.ThemeMode = 'System'
+}
+
 # Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
 # icon only applies to the shortcut, so without this the window shows the powershell.exe icon.
 # The 32x32 frame is preferred: Windows draws 32px in the taskbar and Alt+Tab and 16px in the
