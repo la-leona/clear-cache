@@ -1,0 +1,18 @@
+﻿{
+    "version":  1,
+    "chkWU":  true,
+    "chkDeep":  true,
+    "chkDO":  true,
+    "chkTraces":  true,
+    "chkRecycle":  true,
+    "chkBrowser":  false,
+    "chkForceKill":  false,
+    "chkComponent":  true,
+    "chkResetBase":  false,
+    "chkRebuild":  false,
+    "chkDisk":  false,
+    "chkQuiet":  false,
+    "chkElevate":  true,
+    "olderThanDays":  0,
+    "logPath":  ""
+}
