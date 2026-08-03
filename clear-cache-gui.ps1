@@ -37,6 +37,19 @@ $script:OutFile      = $null
 $script:ErrFile      = $null
 $script:Timer        = $null
 
+# Output pane state.
+#   OpenBar     - a dism.exe progress bar drawn at the end of the pane; the next bar replaces
+#                 it, so the bar appears to update in place instead of piling up. dism emits
+#                 every redraw as "<CR>[==  10.0%  ] <CR><LF>", i.e. a COMPLETE line, so bars
+#                 have to be recognised by pattern, not just by collapsing bare CRs.
+#   OpenLen     - characters of OpenBar currently rendered (stripped before each update).
+#   PartialText - text received without its newline yet. Buffered and NOT rendered, so a chunk
+#                 boundary in the middle of a line cannot freeze a bar into the pane.
+$script:OpenBar     = ''
+$script:OpenLen     = 0
+$script:PartialText = ''
+$script:ProgressPattern = '^\[[=\s]*\d+(\.\d+)?%[=\s]*\]\s*$'
+
 # Portable settings: keep them next to the script so the whole folder can be copied or
 # backed up as one unit. If that folder is not writable (read-only media, restricted ACL,
 # non-elevated run), fall back to the user profile. Load prefers the portable file, so an
@@ -187,6 +200,29 @@ function Get-HostExe {
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win = [Windows.Markup.XamlReader]::Load($reader)
 
+# Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
+# icon only applies to the shortcut, so without this the window shows the powershell.exe icon.
+# The 32x32 frame is preferred: Windows draws 32px in the taskbar and Alt+Tab and 16px in the
+# title bar, so a 32px source stays crisp (clean 2:1 downscale) where a 128/256px frame looks
+# soft.
+$iconPath = Join-Path $PSScriptRoot 'clear-cache-gui.ico'
+if (Test-Path -LiteralPath $iconPath) {
+    try {
+        $frames = ([System.Windows.Media.Imaging.BitmapDecoder]::Create(
+                      (New-Object System.Uri $iconPath), 'None', 'OnLoad')).Frames
+        $pick = $frames | Where-Object { $_.PixelWidth -eq 32 } | Select-Object -First 1
+        if (-not $pick) {                       # nothing at 32: smallest frame above it
+            $pick = $frames | Where-Object { $_.PixelWidth -gt 32 } |
+                    Sort-Object PixelWidth | Select-Object -First 1
+        }
+        if (-not $pick) {                       # only smaller frames exist: take the largest
+            $pick = $frames | Sort-Object PixelWidth -Descending | Select-Object -First 1
+        }
+        if ($pick) { $win.Icon = $pick }
+    }
+    catch { }   # a broken .ico must not stop the GUI
+}
+
 foreach ($n in @('chkWU','chkDeep','chkDO','chkTraces','chkRecycle','chkBrowser','chkForceKill',
                  'chkComponent','chkResetBase','chkRebuild','chkDisk','chkElevate','chkQuiet',
                  'txtDays','txtLog','btnBrowse','txtCommand','btnPreview','btnRun','btnCancel',
@@ -272,11 +308,56 @@ function Import-GuiSettings {
 Set-DefaultOptions
 
 # ----------------------------------------------------------------------------- helpers
+# Appends child-process output. Progress bars are drawn in place: a new bar overwrites the
+# previous one instead of adding a line, and the last bar is kept when normal output resumes.
 function Add-Output {
     param([string]$Text)
     if ([string]::IsNullOrEmpty($Text)) { return }
-    $txtOutput.AppendText($Text)
+
+    # Take the open bar off the pane; it is re-rendered (or replaced) at the end.
+    # NOTE: this must not be called $text - PowerShell variables are case-insensitive, so it
+    # would overwrite the $Text parameter.
+    $pane = $txtOutput.Text
+    if ($script:OpenLen -gt 0 -and $pane.Length -ge $script:OpenLen) {
+        $pane = $pane.Substring(0, $pane.Length - $script:OpenLen)
+    }
+    $bar = $script:OpenBar
+
+    # Continue the buffered partial line, then work line by line.
+    $data  = $script:PartialText + ($Text -replace "`r`n", "`n")
+    $parts = $data -split "`n"
+    $collapse = {                       # within one line, only text after the last CR survives
+        param([string]$s)
+        $i = $s.LastIndexOf("`r")
+        if ($i -ge 0) { return $s.Substring($i + 1) }
+        return $s
+    }
+
+    $lines = @()
+    if ($parts.Count -gt 1) {
+        $lines = $parts[0..($parts.Count - 2)] | ForEach-Object { & $collapse $_ }
+    }
+    $script:PartialText = & $collapse $parts[-1]     # keep buffered until its newline arrives
+
+    foreach ($line in $lines) {
+        if ($line -match $script:ProgressPattern) {
+            $bar = $line                             # replaces the bar drawn before
+        }
+        else {
+            if ($bar -ne '') { $pane += $bar + "`r`n"; $bar = '' }   # keep the last bar
+            $pane += $line + "`r`n"
+        }
+    }
+
+    $txtOutput.Text = $pane + $bar
+    $script:OpenBar = $bar
+    $script:OpenLen = $bar.Length
     $txtOutput.ScrollToEnd()
+}
+
+# Renders a line that never received its newline (e.g. the child exited mid-line).
+function Flush-Output {
+    if ($script:PartialText -ne '') { Add-Output "`n" }
 }
 
 function Get-DaysValue {
@@ -465,6 +546,8 @@ function Start-Cleanup {
             if ($script:OutReader) { Add-Output $script:OutReader.ReadToEnd() }
             if ($script:ErrReader) { Add-Output $script:ErrReader.ReadToEnd() }
 
+            Flush-Output                            # render a last line that had no newline
+
             $code = $script:Proc.ExitCode
             $meaning = switch ($code) {
                 0       { 'completed' }
@@ -537,7 +620,12 @@ $btnCancel.Add_Click({
     }
 })
 
-$btnClear.Add_Click({ $txtOutput.Clear() })
+$btnClear.Add_Click({
+    $txtOutput.Clear()
+    $script:OpenBar     = ''      # forget the bar being drawn in place
+    $script:OpenLen     = 0
+    $script:PartialText = ''
+})
 
 $btnReset.Add_Click({
     $r = [System.Windows.MessageBox]::Show(
@@ -601,5 +689,14 @@ else {
     $lblStatus.Text = 'Ready (not elevated)'
     Add-Output "Not running as Administrator. Windows / DISM / Delivery Optimization targets may be skipped.`r`nUse the 'Run as Administrator' option to restart elevated.`r`n"
 }
+
+# clear-cache-gui.vbs starts this process with a hidden window state (SW_HIDE) so no console
+# appears. A side effect is that the shell skips creating a taskbar button for the first
+# window - it only shows up once the window is moved. Toggling ShowInTaskbar after the window
+# is up recreates the HWND, which makes the taskbar register it right away.
+$win.Add_Loaded({
+        $win.ShowInTaskbar = $false
+        $win.ShowInTaskbar = $true
+    })
 
 $win.ShowDialog() | Out-Null

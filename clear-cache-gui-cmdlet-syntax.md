@@ -386,6 +386,15 @@ foreach ($path in @($script:SettingsPathScript, $script:SettingsPathAppData)) {
 - **`-WindowStyle Hidden` 이 콘솔을 못 숨기는 경우가 있습니다.** 기본 콘솔 호스트가
   Windows Terminal 이면 터미널이 별도 프로세스라 창 스타일 요청을 무시합니다. 그래서 바로가기는
   `clear-cache-gui.vbs`(wscript) 를 사용합니다. 자세한 내용은 GUI README 1장 참고.
+- **숨긴 상태로 시작한 프로세스는 작업표시줄 버튼이 안 생깁니다.** `.vbs` 의
+  `Run(cmd, 0, False)` 는 프로세스를 `SW_HIDE` 로 시작하는데, 이러면 셸이 그 프로세스의 **첫**
+  창에 대한 작업표시줄 버튼을 만들지 않습니다(창을 움직이면 뒤늦게 나타남). 창이 뜬 뒤
+  `ShowInTaskbar` 를 토글하면 WPF 가 HWND 를 다시 만들어 셸에 재등록됩니다.
+  ```powershell
+  $win.Add_Loaded({ $win.ShowInTaskbar = $false; $win.ShowInTaskbar = $true })
+  ```
+  참고: `powershell.exe -WindowStyle Hidden` 로 띄울 때는 프로세스 시작 상태가 정상이라
+  이 문제가 없습니다(콘솔만 나중에 숨김). 즉 원인은 **프로세스 시작 시의 창 표시 상태**입니다.
 
 ---
 
