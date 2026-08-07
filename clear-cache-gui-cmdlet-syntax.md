@@ -4,7 +4,7 @@
 **.NET 타입/멤버**, **XAML/이벤트 문법**을 정리한 참고 자료입니다.
 각 항목의 예시는 스크립트에서 그대로 발췌했습니다.
 
-> 정리 엔진 쪽 문법은 `clear-browser-and-windows-cache-v5-cmdlet-syntax.md` 를 참고하세요.
+> 정리 엔진 쪽 문법은 `clear-browser-and-windows-cache-v6-cmdlet-syntax.md` 를 참고하세요.
 > 이 문서는 **GUI 에만 등장하는 문법**에 초점을 둡니다.
 
 ---
@@ -332,7 +332,7 @@ foreach ($path in @($script:SettingsPathScript, $script:SettingsPathAppData)) {
 | `Add-Type` | WPF / WinForms 어셈블리 로드 |
 | `New-Object` | XmlNodeReader, DispatcherTimer, StreamReader, SaveFileDialog 생성 |
 | `Set-Variable` / `Get-Variable` | 이름으로 컨트롤 변수 만들기/읽기 |
-| `Start-Process` | v5 실행(`-PassThru`, 리다이렉트), 권한 상승(`-Verb RunAs`), 메모장 열기 |
+| `Start-Process` | v6 실행(`-PassThru`, 리다이렉트), 권한 상승(`-Verb RunAs`), 메모장 열기 |
 | `Get-Process` | 현재 호스트 exe 경로 확인(`(Get-Process -Id $PID).Path`) |
 | `Start-Sleep` | 종료 직후 남은 출력 flush 대기 |
 | `Test-Path` | 스크립트/로그/설정 파일 존재 확인 |
@@ -375,7 +375,7 @@ foreach ($path in @($script:SettingsPathScript, $script:SettingsPathAppData)) {
 - **`IsChecked` 는 `Nullable[bool]`** 이라 `-eq $true` 또는 `[bool]` 캐스팅이 필요합니다.
 - **`ShowDialog()` 는 값을 반환**하므로 `| Out-Null` 로 버려야 콘솔/파이프가 지저분해지지 않습니다.
 - **GUI 에서는 `Read-Host` / `Write-Host` 를 쓸 수 없습니다.** 콘솔이 숨겨져 있어 입력이 불가하고
-  출력도 보이지 않습니다. 그래서 이 GUI 는 v5 에 항상 `-Force` 를 넘기고 확인은 MessageBox 로,
+  출력도 보이지 않습니다. 그래서 이 GUI 는 v6 에 항상 `-Force` 를 넘기고 확인은 MessageBox 로,
   출력은 TextBox 로 처리합니다.
 - **오래 걸리는 작업은 반드시 UI 스레드와 분리**해야 창이 멈추지 않습니다. 여기서는 별도
   프로세스 + `DispatcherTimer` 폴링으로 해결했습니다(Runspace 를 쓰는 방법도 있음).
@@ -444,4 +444,4 @@ sh.Run cmd, 0, False
 - 개념 도움말: `Get-Help about_Automatic_Variables`, `about_Script_Blocks`, `about_Scopes`,
   `about_Try_Catch_Finally`, `about_Splatting`
 - 이 GUI 사용법: `clear-cache-gui-README.md`
-- 정리 엔진 문법: `clear-browser-and-windows-cache-v5-cmdlet-syntax.md`
+- 정리 엔진 문법: `clear-browser-and-windows-cache-v6-cmdlet-syntax.md`

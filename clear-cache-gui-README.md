@@ -1,9 +1,9 @@
 # clear-cache-gui.ps1 — 설명 문서
 
-`clear-browser-and-windows-cache-v5.ps1` 을 위한 **PowerShell + WPF GUI 프론트엔드**입니다.
+`clear-browser-and-windows-cache-v6.ps1` 을 위한 **PowerShell + WPF GUI 프론트엔드**입니다.
 체크박스로 옵션을 고르고, 미리보기로 확인한 뒤 정리를 실행합니다.
 
-> v5 스크립트는 **수정하지 않습니다.** 이 GUI 는 인자를 조립해 v5 를 자식 프로세스로 실행하고
+> v6 스크립트는 **수정하지 않습니다.** 이 GUI 는 인자를 조립해 v6 를 자식 프로세스로 실행하고
 > 그 출력을 창에 스트리밍하는 얇은 래퍼입니다.
 
 ---
@@ -61,7 +61,7 @@ wscript.exe "C:\opt\bin\clear-cache-gui.vbs"
 > 참고: 기본 터미널을 "Windows 콘솔 호스트(conhost)"로 바꾸면 `-WindowStyle Hidden` 도
 > 동작하지만, 시스템 전체의 콘솔 사용 방식이 바뀌므로 권장하지 않습니다.
 
-**필요 파일** — 같은 폴더에 `clear-browser-and-windows-cache-v5.ps1` 이 있어야 합니다.
+**필요 파일** — 같은 폴더에 `clear-browser-and-windows-cache-v6.ps1` 이 있어야 합니다.
 (GUI 와 `.vbs` 모두 자기 폴더 기준으로 파일을 찾으므로 폴더째 복사해도 동작합니다.)
 
 ### 아이콘 (창 / 작업표시줄)
@@ -88,10 +88,10 @@ PowerShell 아이콘이 나옵니다. GUI 는 시작할 때 자기 폴더의 **`
 | **Options** | 나이 필터(N일), 관리자 실행, Quiet, 로그 파일 경로 |
 | **Command that will run** | 선택에 따라 실제로 실행될 명령을 실시간 표시 |
 | **버튼 줄** | Preview / Run cleanup / Cancel / Clear output / Open log / Reset defaults … 오른쪽 끝 **Exit** |
-| **Output** | v5 의 출력을 실시간 표시(요약 표가 정렬되도록 고정폭 글꼴 사용) |
+| **Output** | v6 의 출력을 실시간 표시(요약 표가 정렬되도록 고정폭 글꼴 사용) |
 | **하단 상태줄** | 진행 표시 + 상태(Ready / Scanning / Cleaning / Done) |
 
-`Windows temp / logs / font cache` 는 v5 의 기본 정리 대상이라 체크박스가 없습니다(항상 정리).
+`Windows temp / logs / font cache` 는 v6 의 기본 정리 대상이라 체크박스가 없습니다(항상 정리).
 
 ---
 
@@ -128,11 +128,17 @@ PowerShell 아이콘이 나옵니다. GUI 는 시작할 때 자기 폴더의 **`
 
 나이 필터는 `0`(전체)로 시작합니다.
 
+> **v6 주의**: `-ClearBrowserCache` 가 기본 체크이므로, 기본 상태로 **Run cleanup** 을 누르면
+> v6 에서 넓어진 Firefox 삭제 범위가 그대로 적용됩니다(Cache API / 서비스워커 스토리지 캐시,
+> `safebrowsing` 추가 — 측정 환경 기준 약 23 MB -> 약 494 MB). 방문 기록·쿠키·북마크·
+> localStorage·IndexedDB 는 지우지 않으므로 **사이트 로그인은 유지**됩니다.
+> 자세한 내용은 `clear-browser-and-windows-cache-v6-README.md` 5.6 절 참고.
+
 ---
 
 ## 5. 짝이 필요한 옵션 (GUI 에서 사전 차단)
 
-v5 는 잘못된 조합을 **경고**로 알려주지만, GUI 는 애초에 선택할 수 없게 막습니다.
+v6 는 잘못된 조합을 **경고**로 알려주지만, GUI 는 애초에 선택할 수 없게 막습니다.
 
 | 상위 옵션 | 하위 옵션 | 동작 |
 |---|---|---|
@@ -190,13 +196,13 @@ v5 는 잘못된 조합을 **경고**로 알려주지만, GUI 는 애초에 선�
 ## 7. 설계상 알아둘 점
 
 **(1) `-Force` 를 항상 자식에 전달합니다.**
-GUI 는 콘솔을 숨기고 v5 를 실행하므로 v5 의 `Proceed with cleanup? (Y/N)` 프롬프트에 답할 수
-없어 그대로 멈춥니다. 그래서 확인은 **GUI 의 대화상자**가 담당하고, v5 에는 `-Force` 를 넘깁니다.
+GUI 는 콘솔을 숨기고 v6 를 실행하므로 v6 의 `Proceed with cleanup? (Y/N)` 프롬프트에 답할 수
+없어 그대로 멈춥니다. 그래서 확인은 **GUI 의 대화상자**가 담당하고, v6 에는 `-Force` 를 넘깁니다.
 확인 대화상자는 선택한 위험 항목을 개별로 안내합니다(브라우저 종료 / `/ResetBase` 영구성 /
 휴지통 / Explorer 재시작).
 
 **(2) `-Elevate` 는 자식에 전달하지 않습니다.**
-v5 의 `-Elevate` 는 **새 창**을 띄워 자신을 재실행하는데, 그러면 GUI 가 출력을 캡처할 수
+v6 의 `-Elevate` 는 **새 창**을 띄워 자신을 재실행하는데, 그러면 GUI 가 출력을 캡처할 수
 없습니다. 그래서 "Run as Administrator" 가 켜져 있고 현재 관리자가 아니면 **GUI 자체를 관리자로
 재시작**할지 물어봅니다(효과는 동일).
 - Yes : 관리자 창으로 다시 시작(현재 창은 닫힘)
@@ -204,10 +210,10 @@ v5 의 `-Elevate` 는 **새 창**을 띄워 자신을 재실행하는데, 그러
 - Cancel : 실행 취소
 
 **(3) Preview 에는 `-Force` 를 넣지 않습니다.**
-Preview 는 프롬프트가 없어 `-Force` 가 무의미하고, 넣으면 v5 가
+Preview 는 프롬프트가 없어 `-Force` 가 무의미하고, 넣으면 v6 가
 `Force has no effect while Preview is enabled` 경고를 띄우기 때문입니다.
 
-**(4) 출력은 v5 의 콘솔 출력을 그대로 보여줍니다.**
+**(4) 출력은 v6 의 콘솔 출력을 그대로 보여줍니다.**
 요약 표를 GUI 로 다시 그리지 않고 원본 출력을 표시합니다. 고정폭 글꼴
 (`FiraCode Nanum` → `Consolas` → `Courier New` 순으로 시도)로 표 정렬이 유지됩니다.
 
@@ -219,7 +225,7 @@ Preview 는 프롬프트가 없어 `-Force` 가 무의미하고, 넣으면 v5 �
 
 ## 8. 종료 코드 표시
 
-v5 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
+v6 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 
 | 코드 | 표시 |
 |---|---|
@@ -234,8 +240,8 @@ v5 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 
 | 증상 | 확인할 것 |
 |---|---|
-| `Target script not found` | 같은 폴더에 `clear-browser-and-windows-cache-v5.ps1` 이 있는지 |
-| 출력이 비어 있음 | 관리자 권한 여부, 그리고 v5 를 콘솔에서 직접 실행해 동작하는지 |
+| `Target script not found` | 같은 폴더에 `clear-browser-and-windows-cache-v6.ps1` 이 있는지 |
+| 출력이 비어 있음 | 관리자 권한 여부, 그리고 v6 를 콘솔에서 직접 실행해 동작하는지 |
 | 대상이 대부분 건너뛰어짐 | 관리자 권한 없이 실행한 경우. "Run as Administrator" 사용 |
 | 설정이 복원되지 않음 | 스크립트 옆 `clear-cache-gui.settings.json` 존재 여부(Exit 또는 Preview/Run 시 저장). 없으면 `%APPDATA%\clear-cache-gui\settings.json` 확인 |
 | 설정이 스크립트 옆에 안 생김 | 그 폴더에 쓰기 권한이 없어 `%APPDATA%` 로 폴백된 경우. 출력 첫 줄의 경로 확인 |
@@ -251,8 +257,8 @@ v5 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 | `clear-cache-gui.ps1` | 이 GUI |
 | `clear-cache-gui.vbs` | 콘솔 없이 GUI 를 띄우는 런처(바로가기용) |
 | `clear-cache-gui.settings.json` | GUI 옵션 저장 파일(포터블, 자동 생성) |
-| `clear-browser-and-windows-cache-v5.ps1` | 실제 정리 엔진 |
+| `clear-browser-and-windows-cache-v6.ps1` | 실제 정리 엔진 |
 | `clear-all.ps1` | 원클릭 CLI (GUI 기본값의 근거) |
-| `clear-browser-and-windows-cache-v5-README.md` | v5 사용 설명서 |
-| `clear-browser-and-windows-cache-v5-CHANGELOG.md` | v5 변경 이력 |
-| `clear-browser-and-windows-cache-v5-cmdlet-syntax.md` | v5 에 쓰인 cmdlet/문법 설명 |
+| `clear-browser-and-windows-cache-v6-README.md` | v6 사용 설명서 |
+| `clear-browser-and-windows-cache-v6-CHANGELOG.md` | v6 변경 이력 |
+| `clear-browser-and-windows-cache-v6-cmdlet-syntax.md` | v6 에 쓰인 cmdlet/문법 설명 |

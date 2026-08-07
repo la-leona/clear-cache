@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    WPF front-end for clear-browser-and-windows-cache-v5.ps1.
+    WPF front-end for clear-browser-and-windows-cache-v6.ps1.
 
 .DESCRIPTION
     Pick the cleanup options with check boxes, preview what would be deleted, then run.
-    The script itself is not modified: this GUI just builds the arguments, launches v5 in a
+    The script itself is not modified: this GUI just builds the arguments, launches v6 in a
     child process and streams its output into the window.
 
     Defaults match clear-all.ps1 (browser cache, Windows Update cache, deep caches, recycle
@@ -14,7 +14,7 @@
       - The GUI always passes -Force to the child process, because a hidden console cannot
         answer the "Proceed with cleanup? (Y/N)" prompt. The confirmation is done by the GUI
         instead.
-      - -Elevate is NOT passed to the child: v5 would relaunch itself in a new window and the
+      - -Elevate is NOT passed to the child: v6 would relaunch itself in a new window and the
         output could not be captured. The GUI relaunches ITSELF elevated instead.
 
 .EXAMPLE
@@ -29,7 +29,7 @@ Add-Type -AssemblyName System.Windows.Forms   # for the save-file dialog
 
 $ErrorActionPreference = 'Stop'
 
-$script:TargetScript = Join-Path $PSScriptRoot 'clear-browser-and-windows-cache-v5.ps1'
+$script:TargetScript = Join-Path $PSScriptRoot 'clear-browser-and-windows-cache-v6.ps1'
 $script:Proc         = $null
 $script:OutReader    = $null
 $script:ErrReader    = $null
@@ -79,7 +79,7 @@ function Get-HostExe {
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Windows / Browser Cache Cleaner (v5)"
+        Title="Windows / Browser Cache Cleaner (v6)"
         Width="900" Height="760" WindowStartupLocation="CenterScreen">
   <Grid Margin="10">
     <Grid.RowDefinitions>
@@ -205,7 +205,7 @@ $win = [Windows.Markup.XamlReader]::Load($reader)
 # missing property is a terminating error here ($ErrorActionPreference = 'Stop'), which would
 # kill the GUI silently when launched hidden. So check for the property first.
 if ($null -ne $win.GetType().GetProperty('ThemeMode')) {
-    $win.ThemeMode = 'System'
+    $win.ThemeMode = 'None'
 }
 
 # Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
@@ -375,7 +375,7 @@ function Get-DaysValue {
     return $days
 }
 
-# Builds the v5 argument list. -Force is always added for real runs (see .DESCRIPTION).
+# Builds the v6 argument list. -Force is always added for real runs (see .DESCRIPTION).
 function Get-ScriptArgs {
     param([switch]$PreviewMode)
 
@@ -604,7 +604,7 @@ $btnBrowse.Add_Click({
     $dlg = New-Object System.Windows.Forms.SaveFileDialog
     $dlg.Filter = 'Log files (*.log)|*.log|All files (*.*)|*.*'
     $dlg.FileName = 'clean.log'
-    $dlg.OverwritePrompt = $false      # v5 appends
+    $dlg.OverwritePrompt = $false      # v6 appends
     if ($dlg.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
         $txtLog.Text = $dlg.FileName
     }
