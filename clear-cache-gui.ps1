@@ -418,14 +418,18 @@ function Set-Running {
 }
 
 # Relaunch this GUI elevated. Returns $true when a new elevated instance was started.
-# Prefers the .vbs launcher: -WindowStyle Hidden does not hide the console when Windows
-# Terminal is the default host, but wscript.exe has no console at all.
+# Goes through the wscript launcher (.js preferred, .vbs kept as a fallback): wscript.exe has
+# no console of its own, whereas -WindowStyle Hidden does NOT hide the console when Windows
+# Terminal is the default host. Only if no launcher is present do we relaunch PowerShell
+# directly, which may briefly show a terminal window.
 function Invoke-GuiElevation {
     try {
-        $vbs = Join-Path $PSScriptRoot 'clear-cache-gui.vbs'
-        if (Test-Path -LiteralPath $vbs) {
-            Start-Process -FilePath 'wscript.exe' -Verb RunAs -ArgumentList "`"$vbs`""
-            return $true
+        foreach ($launcher in @('clear-cache-gui.js', 'clear-cache-gui.vbs')) {
+            $path = Join-Path $PSScriptRoot $launcher
+            if (Test-Path -LiteralPath $path) {
+                Start-Process -FilePath 'wscript.exe' -Verb RunAs -ArgumentList "`"$path`""
+                return $true
+            }
         }
         Start-Process -FilePath (Get-HostExe) -Verb RunAs -ArgumentList @(
             '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
@@ -698,10 +702,10 @@ else {
     Add-Output "Not running as Administrator. Windows / DISM / Delivery Optimization targets may be skipped.`r`nUse the 'Run as Administrator' option to restart elevated.`r`n"
 }
 
-# clear-cache-gui.vbs starts this process with a hidden window state (SW_HIDE) so no console
-# appears. A side effect is that the shell skips creating a taskbar button for the first
-# window - it only shows up once the window is moved. Toggling ShowInTaskbar after the window
-# is up recreates the HWND, which makes the taskbar register it right away.
+# The wscript launcher (clear-cache-gui.js) starts this process with a hidden window state
+# (SW_HIDE) so no console appears. A side effect is that the shell skips creating a taskbar
+# button for the first window - it only shows up once the window is moved. Toggling
+# ShowInTaskbar after the window is up recreates the HWND, so the taskbar registers it at once.
 $win.Add_Loaded({
         $win.ShowInTaskbar = $false
         $win.ShowInTaskbar = $true
