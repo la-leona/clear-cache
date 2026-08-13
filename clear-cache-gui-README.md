@@ -14,16 +14,20 @@
 powershell -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\opt\bin\clear-cache-gui.ps1
 ```
 
-위 방법은 **콘솔 창이 함께 뜹니다.** 콘솔 없이 GUI 만 띄우려면 아래 `.vbs` 런처를 쓰세요.
+위 방법은 **콘솔 창이 함께 뜹니다.** 콘솔 없이 GUI 만 띄우려면 아래 `.js` 런처를 쓰세요.
 
-### 권장: `.vbs` 런처 (콘솔 창 없음)
+### 권장: `.js` 런처 (콘솔 창 없음)
 
 ```
-wscript.exe "C:\opt\bin\clear-cache-gui.vbs"
+wscript.exe "C:\opt\bin\clear-cache-gui.js"
 ```
-`clear-cache-gui.vbs` 를 더블클릭하거나, 이 파일로 바탕화면 바로가기를 만들면 됩니다.
+`clear-cache-gui.js` 를 더블클릭하거나(`.js` 는 `WScript.exe` 에 연결되어 있음), 이 파일로
+바탕화면 바로가기를 만들면 됩니다.
 바로가기 속성 → **자세히(Advanced) → "관리자 권한으로 실행" 체크**를 권장합니다
 (Windows / DISM / Delivery Optimization 대상에 필요).
+
+> **`cscript.exe` 로 실행하지 마세요.** cscript 는 콘솔 애플리케이션이라 콘솔을 할당하고
+> 터미널 창이 순간 깜빡입니다(실측: wscript 는 추가 콘솔 0개, cscript 는 1개).
 
 ### 왜 `-WindowStyle Hidden` 으로는 안 되나
 
@@ -37,15 +41,16 @@ wscript.exe "C:\opt\bin\clear-cache-gui.vbs"
 |---|---|
 | `powershell.exe -File ...` | GUI + 콘솔 창 |
 | `powershell.exe -WindowStyle Hidden -File ...` | GUI + **콘솔 창(그대로 보임)** |
-| **`wscript.exe clear-cache-gui.vbs`** | **GUI 만** (깜빡임 없음) |
+| **`wscript.exe clear-cache-gui.js`** | **GUI 만** (깜빡임 없음) |
+| `cscript.exe clear-cache-gui.js` | GUI + 콘솔 **1개 순간 깜빡임** |
 | `conhost.exe --headless powershell.exe -File ...` | GUI 만 (문서화되지 않은 옵션) |
 
-`wscript.exe` 는 자체 콘솔이 없는 GUI 앱이고 `.vbs` 가 PowerShell 을 숨긴 상태로 실행하므로
+`wscript.exe` 는 자체 콘솔이 없는 GUI 앱이고 `.js` 가 PowerShell 을 숨긴 상태로 실행하므로
 콘솔이 아예 생기지 않습니다.
 
 ### 어느 PowerShell 로 실행되나
 
-`.vbs` 는 **PowerShell 7(`pwsh.exe`)을 우선** 사용하고, 없으면 Windows PowerShell 5.1
+`.js` 는 **PowerShell 7(`pwsh.exe`)을 우선** 사용하고, 없으면 Windows PowerShell 5.1
 (`powershell.exe`)로 폴백합니다.
 
 | 호스트 | 런타임 | 비고 |
@@ -62,7 +67,7 @@ wscript.exe "C:\opt\bin\clear-cache-gui.vbs"
 > 동작하지만, 시스템 전체의 콘솔 사용 방식이 바뀌므로 권장하지 않습니다.
 
 **필요 파일** — 같은 폴더에 `clear-browser-and-windows-cache-v6.ps1` 이 있어야 합니다.
-(GUI 와 `.vbs` 모두 자기 폴더 기준으로 파일을 찾으므로 폴더째 복사해도 동작합니다.)
+(GUI 와 `.js` 모두 자기 폴더 기준으로 파일을 찾으므로 폴더째 복사해도 동작합니다.)
 
 ### 아이콘 (창 / 작업표시줄)
 
@@ -246,7 +251,7 @@ v6 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 | 설정이 복원되지 않음 | 스크립트 옆 `clear-cache-gui.settings.json` 존재 여부(Exit 또는 Preview/Run 시 저장). 없으면 `%APPDATA%\clear-cache-gui\settings.json` 확인 |
 | 설정이 스크립트 옆에 안 생김 | 그 폴더에 쓰기 권한이 없어 `%APPDATA%` 로 폴백된 경우. 출력 첫 줄의 경로 확인 |
 | 창은 뜨는데 실행이 안 됨 | `-ExecutionPolicy Bypass` 로 실행했는지 |
-| 작업표시줄에 버튼이 안 보임 | 해결됨. `.vbs` 가 프로세스를 숨긴 상태(SW_HIDE)로 시작해 셸이 첫 창의 버튼을 만들지 않던 문제로, 창이 뜬 뒤 `ShowInTaskbar` 를 토글해 재등록합니다(이전에는 창을 움직이면 나타났음) |
+| 작업표시줄에 버튼이 안 보임 | 해결됨. 런처가 프로세스를 숨긴 상태(SW_HIDE)로 시작해 셸이 첫 창의 버튼을 만들지 않던 문제로, 창이 뜬 뒤 `ShowInTaskbar` 를 토글해 재등록합니다(이전에는 창을 움직이면 나타났음) |
 
 ---
 
@@ -255,7 +260,7 @@ v6 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 | 파일 | 설명 |
 |---|---|
 | `clear-cache-gui.ps1` | 이 GUI |
-| `clear-cache-gui.vbs` | 콘솔 없이 GUI 를 띄우는 런처(바로가기용) |
+| `clear-cache-gui.js` | 콘솔 없이 GUI 를 띄우는 런처(바로가기용, **wscript.exe** 로 실행) |
 | `clear-cache-gui.settings.json` | GUI 옵션 저장 파일(포터블, 자동 생성) |
 | `clear-browser-and-windows-cache-v6.ps1` | 실제 정리 엔진 |
 | `clear-all.ps1` | 원클릭 CLI (GUI 기본값의 근거) |
