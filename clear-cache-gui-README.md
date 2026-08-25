@@ -55,13 +55,16 @@ wscript.exe "C:\opt\bin\clear-cache-gui.js"
 
 | 호스트 | 런타임 | 비고 |
 |---|---|---|
-| `%ProgramFiles%\PowerShell\7\pwsh.exe` | 최신 .NET | 다크 테마(`Window.ThemeMode`) 적용됨 |
-| `%WINDIR%\System32\WindowsPowerShell\v1.0\powershell.exe` | .NET Framework 4.8 | 폴백. `ThemeMode` 가 없어 테마는 미적용(그 외 기능은 동일) |
+| `%ProgramFiles%\PowerShell\7\pwsh.exe` | 최신 .NET | **Theme 선택 사용 가능**(`Window.ThemeMode`) |
+| `%WINDIR%\System32\WindowsPowerShell\v1.0\powershell.exe` | .NET Framework 4.8 | 폴백. `ThemeMode` 가 없어 **Theme 드롭다운이 비활성**(그 외 기능은 동일) |
 
-`ThemeMode` 는 최신 .NET WPF 에만 있는 속성이라, GUI 는 **속성이 존재할 때만 적용**합니다.
-(가드가 없으면 5.1 에서 종료성 오류가 나고, 콘솔이 숨겨져 있어 오류도 안 보인 채 창이 안 뜹니다.)
-테마를 바꾸려면 `clear-cache-gui.ps1` 의 `$win.ThemeMode = 'Dark'` 값을
-`'Light'` / `'System'` 으로 수정하세요.
+`ThemeMode` 는 최신 .NET WPF 에만 있는 속성이라, GUI 는 시작 시 **속성 존재를 확인한 뒤에만
+적용**합니다. 없는 호스트에서는 Options 의 Theme 드롭다운이 비활성화되고 툴팁으로 이유를
+알려줍니다. (가드가 없으면 5.1 에서 종료성 오류가 나고, 콘솔이 숨겨져 있어 오류도 안 보인 채
+창이 안 뜹니다.)
+
+테마는 이제 **화면에서 고릅니다** — 아래 "Theme (창 테마)" 절을 보세요.
+스크립트를 고칠 필요가 없습니다.
 
 > 참고: 기본 터미널을 "Windows 콘솔 호스트(conhost)"로 바꾸면 `-WindowStyle Hidden` 도
 > 동작하지만, 시스템 전체의 콘솔 사용 방식이 바뀌므로 권장하지 않습니다.
@@ -90,13 +93,29 @@ PowerShell 아이콘이 나옵니다. GUI 는 시작할 때 자기 폴더의 **`
 | 영역 | 내용 |
 |---|---|
 | **Cleanup targets** | 정리 대상 체크박스. 좌측은 Windows/시스템, 우측은 브라우저·DISM·기타 |
-| **Options** | 나이 필터(N일), 관리자 실행, Quiet, 로그 파일 경로 |
+| **Options** | 나이 필터(N일), 관리자 실행, Quiet, **Theme**, 로그 파일 경로 |
 | **Command that will run** | 선택에 따라 실제로 실행될 명령을 실시간 표시 |
 | **버튼 줄** | Preview / Run cleanup / Cancel / Clear output / Open log / Reset defaults … 오른쪽 끝 **Exit** |
 | **Output** | v6 의 출력을 실시간 표시(요약 표가 정렬되도록 고정폭 글꼴 사용) |
 | **하단 상태줄** | 진행 표시 + 상태(Ready / Scanning / Cleaning / Done) |
 
 `Windows temp / logs / font cache` 는 v6 의 기본 정리 대상이라 체크박스가 없습니다(항상 정리).
+
+### Theme (창 테마)
+
+Options 의 Quiet 체크박스 오른쪽 드롭다운입니다.
+
+| 값 | 결과 |
+|---|---|
+| **`None`** | 기본값. 클래식 WPF 모양 |
+| `Dark` | 어두운 테마 |
+| `Light` | 밝은 테마 |
+| `System` | Windows 의 앱 테마 설정을 따름 |
+
+- **고르는 즉시 적용**되고, `clear-cache-gui.settings.json` 에 함께 저장됩니다.
+- 창 모양만 바꾸는 설정이라 **정리 동작과 무관**하며, `Command that will run` 에도 나타나지 않습니다.
+- `Reset defaults` 를 누르면 `None` 으로 돌아갑니다.
+- **PowerShell 5.1 로 실행되면 비활성화**됩니다(위 "어느 PowerShell 로 실행되나" 참고).
 
 ---
 
@@ -192,9 +211,13 @@ v6 는 잘못된 조합을 **경고**로 알려주지만, GUI 는 애초에 선�
   "chkQuiet": true,
   "chkElevate": true,
   "olderThanDays": 30,
-  "logPath": "C:\\logs\\my clean.log"
+  "logPath": "C:\\logs\\my clean.log",
+  "theme": "Dark"
 }
 ```
+
+`theme` 은 `None` / `Dark` / `Light` / `System` 중 하나입니다. 값이 없거나 목록에 없는 값이면
+`None` 으로 시작합니다(직접 편집해서 오타가 나도 실행에는 문제가 없습니다).
 
 ---
 
@@ -252,6 +275,8 @@ v6 의 종료 코드를 출력 마지막 줄에 해석해 표시합니다.
 | 설정이 스크립트 옆에 안 생김 | 그 폴더에 쓰기 권한이 없어 `%APPDATA%` 로 폴백된 경우. 출력 첫 줄의 경로 확인 |
 | 창은 뜨는데 실행이 안 됨 | `-ExecutionPolicy Bypass` 로 실행했는지 |
 | 작업표시줄에 버튼이 안 보임 | 해결됨. 런처가 프로세스를 숨긴 상태(SW_HIDE)로 시작해 셸이 첫 창의 버튼을 만들지 않던 문제로, 창이 뜬 뒤 `ShowInTaskbar` 를 토글해 재등록합니다(이전에는 창을 움직이면 나타났음) |
+| **Theme 드롭다운이 회색(비활성)** | Windows PowerShell 5.1 로 실행된 경우. `Window.ThemeMode` 가 없어 테마를 적용할 수 없습니다. PowerShell 7 을 설치하면 활성화됩니다(툴팁에도 표시) |
+| **Theme 를 골랐는데 창 색이 안 바뀜** | `System` 은 Windows 앱 테마 설정을 따르므로, 시스템이 밝은 테마면 `Light` 와 같아 보입니다. 명시적으로 `Dark` 를 골라 확인 |
 
 ---
 

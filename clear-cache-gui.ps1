@@ -63,6 +63,10 @@ $script:OptionBoxes = @('chkWU', 'chkDeep', 'chkDO', 'chkTraces', 'chkRecycle',
                         'chkBrowser', 'chkForceKill', 'chkComponent', 'chkResetBase',
                         'chkRebuild', 'chkDisk', 'chkQuiet', 'chkElevate')
 
+# Window theme choices. 'None' keeps the classic look and is the default; it is also the
+# fallback whenever a saved value is missing or unrecognised.
+$script:ThemeChoices = @('None', 'Dark', 'Light', 'System')
+
 function Test-IsAdministrator {
     $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = [Security.Principal.WindowsPrincipal]::new($identity)
@@ -141,8 +145,14 @@ function Get-HostExe {
         <TextBlock Grid.Row="0" Grid.Column="2" Text="day(s)   (0 = all)" VerticalAlignment="Center"/>
         <CheckBox  Grid.Row="0" Grid.Column="3" x:Name="chkElevate" Content="Run as Administrator"
                    Margin="24,0,0,0" VerticalAlignment="Center"/>
-        <CheckBox  Grid.Row="0" Grid.Column="4" x:Name="chkQuiet" Content="Quiet (hide per-item lines)"
-                   Margin="24,0,0,0" VerticalAlignment="Center"/>
+        <!-- Quiet and Theme share this column so Theme sits directly right of the checkbox
+             and the Browse button below keeps its own column. -->
+        <StackPanel Grid.Row="0" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+          <CheckBox  x:Name="chkQuiet" Content="Quiet (hide per-item lines)"
+                     Margin="24,0,0,0" VerticalAlignment="Center"/>
+          <TextBlock Text="Theme" Margin="24,0,6,0" VerticalAlignment="Center"/>
+          <ComboBox  x:Name="cmbTheme" Width="84" VerticalAlignment="Center"/>
+        </StackPanel>
 
         <TextBlock Grid.Row="1" Grid.Column="0" Text="Log file (optional)" VerticalAlignment="Center" Margin="0,8,0,0"/>
         <TextBox   Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" x:Name="txtLog" Margin="6,8,6,0"
@@ -200,13 +210,13 @@ function Get-HostExe {
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win = [Windows.Markup.XamlReader]::Load($reader)
 
-# Window theme ('Dark', 'Light', 'System', 'None'). Window.ThemeMode only exists on modern
-# .NET WPF (PowerShell 7), not on Windows PowerShell 5.1 / .NET Framework - and assigning a
-# missing property is a terminating error here ($ErrorActionPreference = 'Stop'), which would
-# kill the GUI silently when launched hidden. So check for the property first.
-if ($null -ne $win.GetType().GetProperty('ThemeMode')) {
-    $win.ThemeMode = 'None'
-}
+# Window theme, chosen in Options and remembered in the settings file. Window.ThemeMode only
+# exists on modern .NET WPF (PowerShell 7), not on Windows PowerShell 5.1 / .NET Framework -
+# and assigning a missing property is a terminating error here ($ErrorActionPreference =
+# 'Stop'), which would kill the GUI silently when launched hidden. So probe for the property
+# once here and treat the theme as unavailable when it is missing.
+$script:ThemeSupported = ($null -ne $win.GetType().GetProperty('ThemeMode'))
+if ($script:ThemeSupported) { $win.ThemeMode = 'None' }
 
 # Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
 # icon only applies to the shortcut, so without this the window shows the powershell.exe icon.
@@ -234,8 +244,17 @@ if (Test-Path -LiteralPath $iconPath) {
 foreach ($n in @('chkWU','chkDeep','chkDO','chkTraces','chkRecycle','chkBrowser','chkForceKill',
                  'chkComponent','chkResetBase','chkRebuild','chkDisk','chkElevate','chkQuiet',
                  'txtDays','txtLog','btnBrowse','txtCommand','btnPreview','btnRun','btnCancel',
-                 'btnClear','btnOpenLog','btnReset','btnExit','txtOutput','prg','lblStatus')) {
+                 'btnClear','btnOpenLog','btnReset','btnExit','txtOutput','prg','lblStatus',
+                 'cmbTheme')) {
     Set-Variable -Name $n -Value $win.FindName($n) -Scope Script
+}
+
+# Items are filled here rather than in XAML so SelectedItem is a plain string, which keeps
+# saving and loading simple (a XAML-declared list would hand back ComboBoxItem objects).
+$cmbTheme.ItemsSource = [string[]]$script:ThemeChoices
+if (-not $script:ThemeSupported) {
+    $cmbTheme.IsEnabled = $false
+    $cmbTheme.ToolTip   = 'Needs PowerShell 7 (modern .NET WPF). This host has no Window.ThemeMode.'
 }
 
 # --------------------------------------------------------- defaults (match clear-all.ps1)
@@ -256,6 +275,16 @@ function Set-DefaultOptions {
     $chkDisk.IsChecked      = $false
     $chkQuiet.IsChecked     = $false
     $txtLog.Text            = ''
+    $cmbTheme.SelectedItem  = 'None'   # GUI-only setting, not passed to the script
+}
+
+# Applies the chosen window theme. A no-op when this host's WPF has no ThemeMode property.
+function Set-WindowTheme {
+    param([string]$Theme)
+    if (-not $script:ThemeSupported) { return }
+    if ($script:ThemeChoices -notcontains $Theme) { $Theme = 'None' }
+    try { $win.ThemeMode = $Theme }
+    catch { Add-Output ("[theme] could not apply '{0}': {1}`r`n" -f $Theme, $_.Exception.Message) }
 }
 
 # Saves to the portable path first, then the profile path. Returns the path used, or $null.
@@ -266,6 +295,7 @@ function Save-GuiSettings {
     }
     $data['olderThanDays'] = (Get-DaysValue)
     $data['logPath']       = ($txtLog.Text).Trim()
+    $data['theme']         = if ($cmbTheme.SelectedItem) { [string]$cmbTheme.SelectedItem } else { 'None' }
     $json = $data | ConvertTo-Json
 
     foreach ($path in @($script:SettingsPathScript, $script:SettingsPathAppData)) {
@@ -310,6 +340,11 @@ function Import-GuiSettings {
     }
     if ($props -contains 'olderThanDays') { $txtDays.Text = [string][int]$s.olderThanDays }
     if ($props -contains 'logPath')       { $txtLog.Text  = [string]$s.logPath }
+    if ($props -contains 'theme') {
+        # An unknown or hand-edited value falls back to 'None' rather than clearing the box.
+        $t = [string]$s.theme
+        $cmbTheme.SelectedItem = if ($script:ThemeChoices -contains $t) { $t } else { 'None' }
+    }
     return $path
 }
 
@@ -586,6 +621,10 @@ foreach ($c in @($chkWU, $chkDeep, $chkDO, $chkTraces, $chkRecycle, $chkBrowser,
 $txtDays.Add_TextChanged({ Update-CommandPreview })
 $txtLog.Add_TextChanged({ Update-CommandPreview })
 
+# Theme is cosmetic and is not passed to the script, so it only repaints the window - the
+# command preview stays untouched.
+$cmbTheme.Add_SelectionChanged({ Set-WindowTheme ([string]$cmbTheme.SelectedItem) })
+
 # /ResetBase only means something together with the DISM cleanup.
 $syncResetBase = {
     $chkResetBase.IsEnabled = [bool]$chkComponent.IsChecked
@@ -682,6 +721,7 @@ $win.Add_Closing({
 $loadedFrom = Import-GuiSettings
 & $syncResetBase
 & $syncForceKill
+Set-WindowTheme ([string]$cmbTheme.SelectedItem)
 Update-CommandPreview
 
 if ($loadedFrom) {

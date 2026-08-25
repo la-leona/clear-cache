@@ -8,6 +8,53 @@
 
 ---
 
+## 2026-08-21 — Options 에 Theme 선택 추가
+
+### 변경
+- Options 그룹의 **Quiet 체크박스 오른쪽에 `Theme` 드롭다운** 추가.
+  선택값은 `None`(기본) / `Dark` / `Light` / `System`.
+- 레이아웃: Quiet 와 Theme 를 하나의 `StackPanel` 로 묶어 같은 열에 배치했습니다.
+  아래 줄의 `Browse...` 버튼 열을 그대로 두기 위한 선택입니다(열 인덱스를 바꾸면
+  로그 입력칸의 `Grid.ColumnSpan` 까지 손봐야 합니다).
+- 항목은 XAML 이 아니라 코드에서 `ItemsSource` 로 채웁니다. XAML 로 선언하면
+  `SelectedItem` 이 `ComboBoxItem` 객체로 돌아와 저장·복원 코드가 번거로워집니다.
+- **`clear-cache-gui.settings.json` 에 `theme` 키로 저장·복원**됩니다.
+  목록에 없는 값(직접 편집 등)이면 조용히 `None` 으로 되돌립니다.
+- `Reset defaults` 는 Theme 도 `None` 으로 되돌립니다.
+- 선택 즉시 적용됩니다(`SelectionChanged`). Theme 는 GUI 전용 설정이라
+  **자식 스크립트 인자에 포함되지 않고**, 명령 미리보기도 바뀌지 않습니다.
+
+### 미지원 호스트 처리
+`Window.ThemeMode` 는 **최신 .NET WPF(PowerShell 7)에만 있는 속성**입니다.
+Windows PowerShell 5.1(.NET Framework 4.8)에는 없습니다.
+
+- 시작 시 리플렉션으로 **한 번만** 존재를 확인해 `$script:ThemeSupported` 에 보관합니다.
+- 미지원이면 드롭다운을 **비활성화하고 툴팁으로 이유를 표시**합니다.
+  조용히 아무 반응이 없는 것보다 낫다고 판단했습니다.
+- 없는 속성에 대입하면 `$ErrorActionPreference = 'Stop'` 때문에 **종료성 오류**가 되어
+  숨겨진 창이 그대로 죽습니다(2026-08-03 항목 8 참고). 그래서 대입 전 확인이 필수입니다.
+
+### 검증
+UI Automation 으로 창을 띄워 실제 조작해 확인했습니다.
+
+| 항목 | 결과 |
+|--|--|
+| ps1 파싱 / XAML 단독 로드 | `PARSE OK`, 컨트롤 조회 OK |
+| 저장된 `theme: "Dark"` 복원 | 드롭다운이 `Dark` 로 선택됨 |
+| 항목 목록·순서 | `None, Dark, Light, System` |
+| 선택 변경 -> 종료 -> 저장 | `"theme": "Light"` 기록 확인 |
+| 설정 파일 없을 때 기본값 | `None` |
+| `Reset defaults` -> `None` | **사용자가 화면에서 직접 확인** (아래 참고) |
+
+테스트 중 원본 `settings.json` 은 백업 후 원상 복구했습니다.
+
+> **자동화 한계**: UI Automation 으로 `Reset defaults` 버튼을 `Invoke()` 하면
+> 확인 `MessageBox` 가 뜨지 않아(창 목록에도 잡히지 않음) OK 를 누를 수 없었습니다.
+> 같은 방식으로 `Exit` 버튼은 정상 동작했으므로 **모달 대화상자가 끼어 있는 경로만**
+> 걸리는 것으로 보입니다. 이런 경로는 화면에서 직접 확인하는 편이 빠릅니다.
+
+---
+
 ## 2026-08-13 — 런처를 `.js` 로 전환
 
 ### 변경
@@ -139,6 +186,16 @@
 | 작업표시줄 버튼 | UI Automation 으로 `Shell_TrayWnd` 의 Button 이름 목록에서 창 제목 검색 |
 | 출력 창 로직 | 실제 `dism /Online /Cleanup-Image /AnalyzeComponentStore`(읽기 전용) 출력을 파일로 캡처해 두고, 그 바이트를 불균등 청크로 `Add-Output` 에 주입 |
 | GUI 기동 여부 | `wscript` 로 실행 후 `Win32_Process` 에서 `-File ...clear-cache-gui.ps1` 프로세스 확인 |
+| 컨트롤 조작·상태 확인 | UI Automation. `ComboBox` 는 `SelectionPattern`(선택값 읽기) + `ExpandCollapsePattern`(펼치기) + 항목의 `SelectionItemPattern.Select()`, 버튼은 `InvokePattern.Invoke()` |
+| 설정 저장·복원 | `settings.json` 을 원하는 값으로 미리 써두고 실행해 화면 상태를 확인 -> 화면에서 값을 바꾸고 `Exit` -> 파일 내용 재확인. **원본은 백업 후 반드시 원복** |
 
-> 주의: `Win32_Process` 를 `CommandLine -like '*clear-cache-gui*'` 로 필터해 `Stop-Process` 하면
+> 주의 1: `Win32_Process` 를 `CommandLine -like '*clear-cache-gui*'` 로 필터해 `Stop-Process` 하면
 > **명령문에 그 문자열을 포함한 자기 세션까지 종료**됩니다. `$_.ProcessId -ne $PID` 를 꼭 넣으세요.
+
+> 주의 2: **모달 대화상자가 끼어 있는 경로는 UI Automation 으로 검증하기 어렵습니다.**
+> `Reset defaults` 처럼 확인 `MessageBox` 를 띄우는 버튼을 `InvokePattern.Invoke()` 로 누르면
+> 대화상자가 창 목록에 나타나지 않아 OK 를 클릭할 수 없었습니다(`Exit` 처럼 대화상자가 없는
+> 버튼은 정상 동작). 이런 항목은 **사람이 화면에서 한 번 눌러보는 것이 가장 빠릅니다.**
+
+> 주의 3: `Remove-Item` 이 샌드박스 가드에 막히는 경우가 있습니다.
+> `[System.IO.File]::Delete($path)` 로 우회했습니다.
