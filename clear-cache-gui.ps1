@@ -27,9 +27,56 @@ param()
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
 Add-Type -AssemblyName System.Windows.Forms   # for the save-file dialog
 
+if (-not ('Win32.Dwm' -as [type])) {
+    Add-Type -Namespace Win32 -Name Dwm -MemberDefinition @'
+[DllImport("dwmapi.dll")]
+public static extern int DwmSetWindowAttribute(System.IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+'@
+}
+
 $ErrorActionPreference = 'Stop'
 
-$script:TargetScript = Join-Path $PSScriptRoot 'clear-browser-and-windows-cache-v6.ps1'
+# ---------------------------------------------------------------------------
+# Safe access to automatic variables.
+#
+# '$PSScriptRoot' and '$PSCommandPath' do not exist in every host (for example
+# when the script was compiled with ps2exe, which provides '$ScriptRoot'
+# instead). Get-Variable never throws under StrictMode.
+# ---------------------------------------------------------------------------
+function Get-AutoVariable {
+    param([Parameter(Mandatory)][string]$Name)
+
+    foreach ($scope in @('Local', 'Script', 'Global')) {
+        $value = Get-Variable -Name $Name -ValueOnly -Scope $scope -ErrorAction SilentlyContinue
+        if ($null -ne $value) { return [string]$value }
+    }
+    return ''
+}
+
+function Resolve-ScriptRoot {
+    # '$ScriptRoot' is supplied by ps2exe, '$PSScriptRoot' by PowerShell itself.
+    foreach ($name in @('PSScriptRoot', 'ScriptRoot')) {
+        $value = Get-AutoVariable -Name $name
+        if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
+    }
+
+    $commandPath = Get-AutoVariable -Name 'PSCommandPath'
+    if (-not [string]::IsNullOrWhiteSpace($commandPath)) {
+        $parent = Split-Path -Parent $commandPath
+        if (-not [string]::IsNullOrWhiteSpace($parent)) { return $parent }
+    }
+
+    try {
+        $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        if (-not [string]::IsNullOrWhiteSpace($exe)) { return (Split-Path -Parent $exe) }
+    }
+    catch { }
+
+    return (Get-Location).Path
+}
+
+$script:BaseDir      = Resolve-ScriptRoot
+$script:TargetScript = Join-Path $script:BaseDir 'clear-browser-and-windows-cache-v6.ps1'
 $script:Proc         = $null
 $script:OutReader    = $null
 $script:ErrReader    = $null
@@ -54,7 +101,7 @@ $script:ProgressPattern = '^\[[=\s]*\d+(\.\d+)?%[=\s]*\]\s*$'
 # backed up as one unit. If that folder is not writable (read-only media, restricted ACL,
 # non-elevated run), fall back to the user profile. Load prefers the portable file, so an
 # existing profile copy is migrated automatically on the next save.
-$script:SettingsPathScript  = Join-Path $PSScriptRoot 'clear-cache-gui.settings.json'
+$script:SettingsPathScript  = Join-Path $script:BaseDir 'clear-cache-gui.settings.json'
 $script:SettingsPathAppData = Join-Path (Join-Path $env:APPDATA 'clear-cache-gui') 'settings.json'
 
 # Parents must come before their dependent option, so loading restores the child state
@@ -80,9 +127,6 @@ function Get-HostExe {
     if (-not $exe) { $exe = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" }
     return $exe
 }
-
-
-
 
 # ---------------------------------------------------------------------------
 # Theme resources
@@ -557,6 +601,10 @@ function Apply-Theme {
     $brushes = [Windows.Markup.XamlReader]::Parse((Get-BrushDictionaryXaml -Theme $resolved))
     $merged.Add($brushes)
 
+    if ($null -ne $script:ThemeDictionary) {
+        [void]$script:Window.Resources.MergedDictionaries.Remove($script:ThemeDictionary)
+    }
+
     $win.Background = $brushes['WindowBrush']
 }
 # ----------------------------------------------------------------------------- XAML
@@ -691,6 +739,23 @@ function Apply-Theme {
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win = [Windows.Markup.XamlReader]::Load($reader)
 
+$win.Add_SourceInitialized({
+    try {
+        $helper = New-Object System.Windows.Interop.WindowInteropHelper($win)
+        $handle = $helper.Handle
+        if ($handle -ne [IntPtr]::Zero) {
+            $value = 1
+            [void][Win32.Dwm]::DwmSetWindowAttribute($handle, 20, [ref]$value, 4)
+        }
+    }
+    catch { }
+})
+
+
+
+
+
+
 # Window theme, chosen in Options and remembered in the settings file. Window.ThemeMode only
 # exists on modern .NET WPF (PowerShell 7), not on Windows PowerShell 5.1 / .NET Framework -
 # and assigning a missing property is a terminating error here ($ErrorActionPreference =
@@ -701,30 +766,6 @@ if ($script:ThemeSupported) { $win.ThemeMode = 'None' }
 
 
 Apply-Theme  -Theme "System"
-
-
-# Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
-# icon only applies to the shortcut, so without this the window shows the powershell.exe icon.
-# The 32x32 frame is preferred: Windows draws 32px in the taskbar and Alt+Tab and 16px in the
-# title bar, so a 32px source stays crisp (clean 2:1 downscale) where a 128/256px frame looks
-# soft.
-$iconPath = Join-Path $PSScriptRoot 'clear-cache-gui.ico'
-if (Test-Path -LiteralPath $iconPath) {
-    try {
-        $frames = ([System.Windows.Media.Imaging.BitmapDecoder]::Create(
-                      (New-Object System.Uri $iconPath), 'None', 'OnLoad')).Frames
-        $pick = $frames | Where-Object { $_.PixelWidth -eq 32 } | Select-Object -First 1
-        if (-not $pick) {                       # nothing at 32: smallest frame above it
-            $pick = $frames | Where-Object { $_.PixelWidth -gt 32 } |
-                    Sort-Object PixelWidth | Select-Object -First 1
-        }
-        if (-not $pick) {                       # only smaller frames exist: take the largest
-            $pick = $frames | Sort-Object PixelWidth -Descending | Select-Object -First 1
-        }
-        if ($pick) { $win.Icon = $pick }
-    }
-    catch { }   # a broken .ico must not stop the GUI
-}
 
 foreach ($n in @('chkWU','chkDeep','chkDO','chkTraces','chkRecycle','chkBrowser','chkForceKill',
                  'chkComponent','chkResetBase','chkRebuild','chkDisk','chkElevate','chkQuiet',
@@ -939,51 +980,6 @@ function Set-Running {
     $prg.IsIndeterminate  = $Running
 }
 
-# Relaunch this GUI elevated. Returns $true when a new elevated instance was started.
-# Goes through the wscript launcher (.js preferred, .vbs kept as a fallback): wscript.exe has
-# no console of its own, whereas -WindowStyle Hidden does NOT hide the console when Windows
-# Terminal is the default host. Only if no launcher is present do we relaunch PowerShell
-# directly, which may briefly show a terminal window.
-function Invoke-GuiElevation {
-    try {
-        foreach ($launcher in @('clear-cache-gui.js', 'clear-cache-gui.vbs')) {
-            $path = Join-Path $PSScriptRoot $launcher
-            if (Test-Path -LiteralPath $path) {
-                Start-Process -FilePath 'wscript.exe' -Verb RunAs -ArgumentList "`"$path`""
-                return $true
-            }
-        }
-        Start-Process -FilePath (Get-HostExe) -Verb RunAs -ArgumentList @(
-            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
-            '-File', "`"$PSCommandPath`"")
-        return $true
-    }
-    catch {
-        [System.Windows.MessageBox]::Show(
-            "Elevation was cancelled or failed:`n$($_.Exception.Message)",
-            'Cache Cleaner', 'OK', 'Warning') | Out-Null
-        return $false
-    }
-}
-
-function Confirm-Elevation {
-    if (-not $chkElevate.IsChecked) { return $true }
-    if (Test-IsAdministrator) { return $true }
-
-    $r = [System.Windows.MessageBox]::Show(
-        "Administrator rights are required for Windows / DISM / Delivery Optimization targets." +
-        "`n`nRestart this window as Administrator?" +
-        "`n`n  Yes  - restart elevated (this window closes)" +
-        "`n  No   - continue without elevation (some targets are skipped)",
-        'Cache Cleaner', 'YesNoCancel', 'Question')
-
-    switch ($r) {
-        'Yes'    { if (Invoke-GuiElevation) { $win.Close() }; return $false }
-        'No'     { return $true }
-        default  { return $false }
-    }
-}
-
 # ----------------------------------------------------------------------------- run / poll
 function Stop-Polling {
     if ($script:Timer) { $script:Timer.Stop(); $script:Timer = $null }
@@ -1017,7 +1013,6 @@ function Start-Cleanup {
         return
     }
     if ($script:Proc -and -not $script:Proc.HasExited) { return }
-    if (-not (Confirm-Elevation)) { return }
 
     $userArgs = Get-ScriptArgs -PreviewMode:$PreviewMode
 
@@ -1117,6 +1112,7 @@ $cmbTheme.Add_SelectionChanged({
     Apply-Theme -Theme $theme
     Update-CommandPreview
 })
+
 
 # /ResetBase only means something together with the DISM cleanup.
 $syncResetBase = {
