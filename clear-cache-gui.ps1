@@ -1082,20 +1082,12 @@ $txtLog.Add_TextChanged({ Update-CommandPreview })
 
 # Theme is cosmetic and is not passed to the script, so it only repaints the window - the
 # command preview stays untouched.
-########## $cmbTheme.Add_SelectionChanged({ Set-WindowTheme ([string]$cmbTheme.SelectedItem) })
 $cmbTheme.Add_SelectionChanged({
     if ($script:SuppressPreview) { return }
     $theme = Get-ComboValue $cmbTheme
     Apply-Theme -Theme $theme
     Update-CommandPreview
 })
-
-
-
-
-
-
-
 
 # /ResetBase only means something together with the DISM cleanup.
 $syncResetBase = {
