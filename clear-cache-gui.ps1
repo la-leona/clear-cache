@@ -389,12 +389,39 @@ $script:StylesXaml = @'
           <Border Background="{DynamicResource ControlBrush}"
                   BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
                   CornerRadius="3" Padding="1">
-            <Grid>
+            <Grid x:Name="TemplateRoot" ClipToBounds="True">
               <Rectangle x:Name="PART_Track"/>
-              <Rectangle x:Name="PART_Indicator" HorizontalAlignment="Left"
-                         Fill="{DynamicResource AccentBrush}" RadiusX="2" RadiusY="2"/>
+              <Grid x:Name="PART_Indicator" HorizontalAlignment="Left" Margin="0">
+                <Grid.RenderTransform>
+                  <TranslateTransform x:Name="IndicatorTransform" X="0"/>
+                </Grid.RenderTransform>
+                <Rectangle Fill="{DynamicResource AccentBrush}" RadiusX="2" RadiusY="2"/>
+              </Grid>
             </Grid>
           </Border>
+          <ControlTemplate.Triggers>
+            <Trigger Property="IsIndeterminate" Value="True">
+              <Setter TargetName="PART_Indicator" Property="Width" Value="120"/>
+              <Trigger.EnterActions>
+                <BeginStoryboard>
+                  <Storyboard RepeatBehavior="Forever">
+                    <DoubleAnimation Storyboard.TargetName="IndicatorTransform"
+                                     Storyboard.TargetProperty="X"
+                                     From="-840" To="840" Duration="0:0:3" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.EnterActions>
+              <Trigger.ExitActions>
+                <BeginStoryboard>
+                  <Storyboard>
+                    <DoubleAnimation Storyboard.TargetName="IndicatorTransform"
+                                     Storyboard.TargetProperty="X"
+                                     To="0" Duration="0:0:0.3" />
+                  </Storyboard>
+                </BeginStoryboard>
+              </Trigger.ExitActions>
+            </Trigger>
+          </ControlTemplate.Triggers>
         </ControlTemplate>
       </Setter.Value>
     </Setter>
@@ -537,7 +564,8 @@ function Apply-Theme {
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Windows / Browser Cache Cleaner (v6)"
-        Width="900" Height="760" WindowStartupLocation="CenterScreen">
+        Width="900" Height="760" WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize">
   <Grid Margin="10">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto"/>
@@ -1082,12 +1110,20 @@ $txtLog.Add_TextChanged({ Update-CommandPreview })
 
 # Theme is cosmetic and is not passed to the script, so it only repaints the window - the
 # command preview stays untouched.
+########## $cmbTheme.Add_SelectionChanged({ Set-WindowTheme ([string]$cmbTheme.SelectedItem) })
 $cmbTheme.Add_SelectionChanged({
     if ($script:SuppressPreview) { return }
     $theme = Get-ComboValue $cmbTheme
     Apply-Theme -Theme $theme
     Update-CommandPreview
 })
+
+
+
+
+
+
+
 
 # /ResetBase only means something together with the DISM cleanup.
 $syncResetBase = {
