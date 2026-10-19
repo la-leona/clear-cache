@@ -29,47 +29,7 @@ Add-Type -AssemblyName System.Windows.Forms   # for the save-file dialog
 
 $ErrorActionPreference = 'Stop'
 
-# ---------------------------------------------------------------------------
-# Safe access to automatic variables.
-#
-# '$PSScriptRoot' and '$PSCommandPath' do not exist in every host (for example
-# when the script was compiled with ps2exe, which provides '$ScriptRoot'
-# instead). Get-Variable never throws under StrictMode.
-# ---------------------------------------------------------------------------
-function Get-AutoVariable {
-    param([Parameter(Mandatory)][string]$Name)
-
-    foreach ($scope in @('Local', 'Script', 'Global')) {
-        $value = Get-Variable -Name $Name -ValueOnly -Scope $scope -ErrorAction SilentlyContinue
-        if ($null -ne $value) { return [string]$value }
-    }
-    return ''
-}
-
-function Resolve-ScriptRoot {
-    # '$ScriptRoot' is supplied by ps2exe, '$PSScriptRoot' by PowerShell itself.
-    foreach ($name in @('PSScriptRoot', 'ScriptRoot')) {
-        $value = Get-AutoVariable -Name $name
-        if (-not [string]::IsNullOrWhiteSpace($value)) { return $value }
-    }
-
-    $commandPath = Get-AutoVariable -Name 'PSCommandPath'
-    if (-not [string]::IsNullOrWhiteSpace($commandPath)) {
-        $parent = Split-Path -Parent $commandPath
-        if (-not [string]::IsNullOrWhiteSpace($parent)) { return $parent }
-    }
-
-    try {
-        $exe = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
-        if (-not [string]::IsNullOrWhiteSpace($exe)) { return (Split-Path -Parent $exe) }
-    }
-    catch { }
-
-    return (Get-Location).Path
-}
-
-$script:BaseDir      = Resolve-ScriptRoot
-$script:TargetScript = Join-Path $script:BaseDir 'clear-browser-and-windows-cache-v6.ps1'
+$script:TargetScript = Join-Path $PSScriptRoot 'clear-browser-and-windows-cache-v6.ps1'
 $script:Proc         = $null
 $script:OutReader    = $null
 $script:ErrReader    = $null
@@ -94,7 +54,7 @@ $script:ProgressPattern = '^\[[=\s]*\d+(\.\d+)?%[=\s]*\]\s*$'
 # backed up as one unit. If that folder is not writable (read-only media, restricted ACL,
 # non-elevated run), fall back to the user profile. Load prefers the portable file, so an
 # existing profile copy is migrated automatically on the next save.
-$script:SettingsPathScript  = Join-Path $script:BaseDir 'clear-cache-gui.settings.json'
+$script:SettingsPathScript  = Join-Path $PSScriptRoot 'clear-cache-gui.settings.json'
 $script:SettingsPathAppData = Join-Path (Join-Path $env:APPDATA 'clear-cache-gui') 'settings.json'
 
 # Parents must come before their dependent option, so loading restores the child state
@@ -120,6 +80,9 @@ function Get-HostExe {
     if (-not $exe) { $exe = "$env:WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe" }
     return $exe
 }
+
+
+
 
 # ---------------------------------------------------------------------------
 # Theme resources
@@ -739,6 +702,30 @@ if ($script:ThemeSupported) { $win.ThemeMode = 'None' }
 
 Apply-Theme  -Theme "System"
 
+
+# Title bar + taskbar icon, taken from clear-cache-gui.ico next to this script. A shortcut's
+# icon only applies to the shortcut, so without this the window shows the powershell.exe icon.
+# The 32x32 frame is preferred: Windows draws 32px in the taskbar and Alt+Tab and 16px in the
+# title bar, so a 32px source stays crisp (clean 2:1 downscale) where a 128/256px frame looks
+# soft.
+$iconPath = Join-Path $PSScriptRoot 'clear-cache-gui.ico'
+if (Test-Path -LiteralPath $iconPath) {
+    try {
+        $frames = ([System.Windows.Media.Imaging.BitmapDecoder]::Create(
+                      (New-Object System.Uri $iconPath), 'None', 'OnLoad')).Frames
+        $pick = $frames | Where-Object { $_.PixelWidth -eq 32 } | Select-Object -First 1
+        if (-not $pick) {                       # nothing at 32: smallest frame above it
+            $pick = $frames | Where-Object { $_.PixelWidth -gt 32 } |
+                    Sort-Object PixelWidth | Select-Object -First 1
+        }
+        if (-not $pick) {                       # only smaller frames exist: take the largest
+            $pick = $frames | Sort-Object PixelWidth -Descending | Select-Object -First 1
+        }
+        if ($pick) { $win.Icon = $pick }
+    }
+    catch { }   # a broken .ico must not stop the GUI
+}
+
 foreach ($n in @('chkWU','chkDeep','chkDO','chkTraces','chkRecycle','chkBrowser','chkForceKill',
                  'chkComponent','chkResetBase','chkRebuild','chkDisk','chkElevate','chkQuiet',
                  'txtDays','txtLog','btnBrowse','txtCommand','btnPreview','btnRun','btnCancel',
@@ -960,7 +947,7 @@ function Set-Running {
 function Invoke-GuiElevation {
     try {
         foreach ($launcher in @('clear-cache-gui.js', 'clear-cache-gui.vbs')) {
-            $path = Join-Path $script:BaseDir $launcher
+            $path = Join-Path $PSScriptRoot $launcher
             if (Test-Path -LiteralPath $path) {
                 Start-Process -FilePath 'wscript.exe' -Verb RunAs -ArgumentList "`"$path`""
                 return $true
@@ -1130,13 +1117,6 @@ $cmbTheme.Add_SelectionChanged({
     Apply-Theme -Theme $theme
     Update-CommandPreview
 })
-
-
-
-
-
-
-
 
 # /ResetBase only means something together with the DISM cleanup.
 $syncResetBase = {
