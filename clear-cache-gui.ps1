@@ -27,6 +27,13 @@ param()
 Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase, System.Xaml
 Add-Type -AssemblyName System.Windows.Forms   # for the save-file dialog
 
+if (-not ('Win32.Dwm' -as [type])) {
+    Add-Type -Namespace Win32 -Name Dwm -MemberDefinition @'
+[DllImport("dwmapi.dll")]
+public static extern int DwmSetWindowAttribute(System.IntPtr hwnd, int attr, ref int attrValue, int attrSize);
+'@
+}
+
 $ErrorActionPreference = 'Stop'
 
 # ---------------------------------------------------------------------------
@@ -594,6 +601,10 @@ function Apply-Theme {
     $brushes = [Windows.Markup.XamlReader]::Parse((Get-BrushDictionaryXaml -Theme $resolved))
     $merged.Add($brushes)
 
+    if ($null -ne $script:ThemeDictionary) {
+        [void]$script:Window.Resources.MergedDictionaries.Remove($script:ThemeDictionary)
+    }
+
     $win.Background = $brushes['WindowBrush']
 }
 # ----------------------------------------------------------------------------- XAML
@@ -727,6 +738,23 @@ function Apply-Theme {
 
 $reader = New-Object System.Xml.XmlNodeReader $xaml
 $win = [Windows.Markup.XamlReader]::Load($reader)
+
+$win.Add_SourceInitialized({
+    try {
+        $helper = New-Object System.Windows.Interop.WindowInteropHelper($win)
+        $handle = $helper.Handle
+        if ($handle -ne [IntPtr]::Zero) {
+            $value = 1
+            [void][Win32.Dwm]::DwmSetWindowAttribute($handle, 20, [ref]$value, 4)
+        }
+    }
+    catch { }
+})
+
+
+
+
+
 
 # Window theme, chosen in Options and remembered in the settings file. Window.ThemeMode only
 # exists on modern .NET WPF (PowerShell 7), not on Windows PowerShell 5.1 / .NET Framework -
@@ -1130,12 +1158,6 @@ $cmbTheme.Add_SelectionChanged({
     Apply-Theme -Theme $theme
     Update-CommandPreview
 })
-
-
-
-
-
-
 
 
 # /ResetBase only means something together with the DISM cleanup.
